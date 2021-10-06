@@ -6,6 +6,7 @@
 #include "/Users/fang/Documents/Arduino/libraries/openGLCD/fonts/utf8font10x16.h"
 #define SW1 2
 #define SW2 3
+
 int mod = 0;
 String nowStringHour = "00";
 String nowStringMinute = "00";
@@ -17,7 +18,6 @@ int8_t sw1oldValue = true;
 int8_t sw2oldValue = true;
 int8_t sw1status = 0;
 int8_t sw2status = 0;
-boolean point = true;
 
 void setup()
 {
@@ -136,7 +136,7 @@ void readSwitch() {
 
         }
       }else{
-        mod == 0;
+        mod = 0;
       }
     }
     sw1oldValue = sw1value;
