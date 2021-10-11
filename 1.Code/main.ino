@@ -1,19 +1,31 @@
-#include <openGLCD.h>
-#include <Arduino.h>
-#include <TimeLib.h>
-#include "/Users/fang/Documents/Arduino/libraries/openGLCD/fonts/fixednums15x31.h"
-#include "/Users/fang/Documents/Arduino/libraries/openGLCD/fonts/font8x8.h"
-#include "/Users/fang/Documents/Arduino/libraries/openGLCD/fonts/utf8font10x16.h"
-#define SW1 2
-#define SW2 3
+#include <Arduino.h>  
+#include <openGLCD.h> //https://github.com/thegeek82000/openGLCD
+#include <TimeLib.h>  //https://github.com/PaulStoffregen/Time
+#include <DHT.h>  //https://github.com/adafruit/DHT-sensor-library
+                  //Also need to install Adafruit Unified Sensor
+#include "/Users/fang/Documents/GitHub/ArduinoClock/1.Code/fonts/fixednums15x31.h"  //Also Can Use #include <fixednums15x31.h>
+//#include "/Users/fang/Documents/GitHub/ArduinoClock/fonts/font8x8.h"  //Also Can Use #include <font8x8.h>
+#include "/Users/fang/Documents/GitHub/ArduinoClock/1.Code/fonts/utf8font10x16.h"  //Also Can Use #include <utf8font10x16.h>
+#define SW1 2 //定义开关1引脚
+#define SW2 3 //定义开关2引脚
+#define DHTPIN 12  //定义温度传感器引脚
+#define DHTTYPE DHT11 //定义温度传感器型号
+#define TIME_HEADER  "T"   // Header tag for serial time sync message
+DHT dht(DHTPIN, DHTTYPE); //初始化温度传感器
 
+//变量定义部分
 int mod = 0;
+long int t1 = 0;
+long int t2 = 0;
+float temp = 0;
+float hum = 0;
 String nowStringHour = "00";
 String nowStringMinute = "00";
 String nowStringSecond = "00";
 String nowStringMonth = "00";
 String nowStringDay = "00";
-
+String tempString = "00.00";
+String humString = "00.00";
 int8_t sw1oldValue = true;
 int8_t sw2oldValue = true;
 int8_t sw1status = 0;
@@ -22,7 +34,8 @@ int8_t sw2status = 0;
 void setup()
 {
   //Initalize
-  Serial.begin(115200);
+  Serial.begin(9600);
+  dht.begin();
 
   // switch setup
   pinMode(SW1, INPUT);
@@ -36,16 +49,46 @@ void setup()
 
   // Select the font for the default text area
   GLCD.SelectFont(utf8font10x16);
-  setTime(0, 0, 0, 1, 1, 2021);
+  // Set time
+  setTime(0, 0, 0, 10, 10, 2021);
 
 }
 
 void loop()
 {
-  readSwitch();
+  readSwitch(); //读取开关
+  //插线时间同步部分
+  if (Serial.available()) {
+    processSyncMessage();
+  }
+  //显示第一行
   GLCD.CursorTo(0, 0);
   GLCD.SelectFont(utf8font10x16);
-  GLCD.println("                          Now Time");
+  //GLCD.println("                          Now Time");
+  if (t1 == 0){
+    t1 = millis() + 3000;
+  }
+  t2 = millis();
+  if (t2 > t1){
+    temp = dht.readTemperature();
+    hum = dht.readHumidity();
+    //Serial.println("t1: " + String(t1));
+    //Serial.println("t2: " + String(t2));
+    //delay(2000);
+    t1 = 0;
+  }
+  if (temp <= 9){
+    tempString = "0" + String(temp); 
+  }else{
+    tempString = String(temp);
+  }
+  if (hum <= 9){
+    humString = "0" + String(hum); 
+  }else{
+    humString = String(hum);
+  }
+  GLCD.println("                " + tempString + "*C " + humString + "%");
+  //显示第二行
   GLCD.CursorTo(0, 1);
   int8_t nowMonth = month();
   if (nowMonth <= 9){
@@ -60,6 +103,7 @@ void loop()
     nowStringDay = String(nowDay);
   }
   GLCD.println("                     " + String(year()) + " / " + nowStringMonth + " / " + nowStringDay);
+  //显示第三行
   GLCD.CursorTo(0, 2);
   GLCD.SelectFont(fixednums15x31);
   int8_t nowHour = hour();
@@ -88,6 +132,17 @@ void loop()
   */
 }
 
+void processSyncMessage() {
+  unsigned long pctime;
+  const unsigned long DEFAULT_TIME = 1357041600; // Jan 1 2013
+
+  if(Serial.find(TIME_HEADER)) {
+     pctime = Serial.parseInt();
+     if( pctime >= DEFAULT_TIME) { // check the integer is a valid time (greater than Jan 1 2013)
+       setTime(pctime); // Sync Arduino clock to the time received on the serial port
+     }
+  }
+}
 
 void readSwitch() {
   int8_t sw1value = digitalRead(SW1);
@@ -148,8 +203,10 @@ void readSwitch() {
         if (mod == 1){
           if (second() >= 50){
             setTime(hour(), minute() + 1, 0, day(), month(), year());  //H,M,S,D,M,Y
+            GLCD.ClearScreen();
           }else{
             setTime(hour(), minute(), 0, day(), month(), year());  //H,M,S,D,M,Y
+            GLCD.ClearScreen();
           }
         }else if (mod == 2){
           int8_t setHour = hour();
@@ -158,6 +215,7 @@ void readSwitch() {
             setHour == 0;
           }
           setTime(setHour, minute(), second(), day(), month(), year());  //H,M,S,D,M,Y
+          GLCD.ClearScreen();
         }else if (mod == 3){
           int8_t setMinute = minute();
           setMinute++;
@@ -165,6 +223,7 @@ void readSwitch() {
             setMinute == 0;
           }
           setTime(hour(), setMinute, second(), day(), month(), year());  //H,M,S,D,M,Y
+          GLCD.ClearScreen();
         }else if (mod == 4){
           int8_t setYear = year();
           setYear++;
@@ -172,6 +231,7 @@ void readSwitch() {
             setYear == 2021;
           }
           setTime(hour(), minute(), second(), day(), month(), setYear);  //H,M,S,D,M,Y
+          GLCD.ClearScreen();
         }else if (mod == 5){
           int8_t setMonth = month();
           setMonth++;
@@ -179,6 +239,7 @@ void readSwitch() {
             setMonth == 1;
           }
           setTime(hour(), minute(), second(), day(), setMonth, year());  //H,M,S,D,M,Y
+          GLCD.ClearScreen();
         }else if (mod == 6){
           int8_t setDay = day();
           setDay++;
@@ -188,6 +249,7 @@ void readSwitch() {
             setDay == 1;
           }
           setTime(hour(), minute(), second(), setDay, month(), year());  //H,M,S,D,M,Y
+          GLCD.ClearScreen();
         }
       
     }
